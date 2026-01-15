@@ -1,39 +1,22 @@
-﻿using HarmonyLib;
+﻿#if IL2CPP
 using Il2CppGameKit.Utilities;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppScheduleOne.DevUtilities;
-using Il2CppScheduleOne.Equipping;
-using Il2CppScheduleOne.Growing;
-using Il2CppScheduleOne.Interaction;
-using Il2CppScheduleOne.ItemFramework;
-using Il2CppScheduleOne.Networking;
-using Il2CppScheduleOne.ObjectScripts;
-using Il2CppScheduleOne.ObjectScripts.Soil;
-using Il2CppScheduleOne.Packaging;
 using Il2CppScheduleOne.PlayerScripts;
-using Il2CppScheduleOne.PlayerTasks;
-using Il2CppScheduleOne.Product;
-using Il2CppScheduleOne.Property.Utilities.Water;
-using Il2CppScheduleOne.StationFramework;
 using Il2CppScheduleOne.UI;
-using Il2CppScheduleOne.UI.Stations;
-using Il2CppSteamworks;
+#elif MONO
+using ScheduleOne.PlayerScripts;
+using ScheduleOne.DevUtilities;
+using ScheduleOne.UI;
+#endif
+using HarmonyLib;
 using MelonLoader;
-using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
-using UnityEngine.UIElements;
-using UnityEngine.XR;
-using static Il2CppScheduleOne.PlayerScripts.PlayerMovement;
 
-[assembly: MelonInfo(typeof(AutoJumpMod.Mod), "AutoJumpMod", "0.1.0", "Robert Rioja")]
+[assembly: MelonInfo(typeof(AutoJumpMod.Mod), "AutoJumpMod", "0.2.0", "Robert Rioja")]
 [assembly: MelonColor(1, 255, 20, 147)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
@@ -45,10 +28,14 @@ namespace AutoJumpMod {
 
 		public override void OnSceneWasLoaded(int buildIndex, string sceneName) {
 			if(sceneName != "Main") {
-				return;
+                Melon<Mod>.Logger.Msg("Scene changed to " + sceneName + " - doing nothing");
+
+                return;
 			}
 
-			MelonCoroutines.Start(GetPlayerMovementAndJumpControl());
+            Melon<Mod>.Logger.Msg("Scene changed to main - continuing");
+
+            MelonCoroutines.Start(GetPlayerMovementAndJumpControl());
 		}
 
 		[HarmonyPatch(typeof(RebindActionUI), "UpdateBindingDisplay")]
@@ -68,7 +55,11 @@ namespace AutoJumpMod {
 					return;
 				}
 
+#if IL2CPP
 				if(!jumpInputAction.name.Contains("Jump", Il2CppSystem.StringComparison.InvariantCultureIgnoreCase)) {
+#elif MONO
+				if(!jumpInputAction.name.Contains("Jump", StringComparison.InvariantCultureIgnoreCase)) {
+#endif
 					return;
 				}
 
@@ -84,13 +75,21 @@ namespace AutoJumpMod {
 					return;
 				}
 
+#if IL2CPP
 				if(jumpInputControl.TryCast<KeyControl>() is null) {
+#elif MONO
+				if(jumpInputControl as KeyControl is null) {
+#endif
 					Melon<Mod>.Logger.Msg("Couldn't find jump key control");
 					return;
 				}
 
+#if IL2CPP
 				jumpKeyControl = jumpInputControl.Cast<KeyControl>();
-				Melon<Mod>.Logger.Msg("Jump button path changed: " + jumpInputControl.path);
+#elif MONO
+				jumpKeyControl = jumpInputControl as KeyControl;
+#endif
+                Melon<Mod>.Logger.Msg("Jump button path changed: " + jumpInputControl.path);
 			}
 		}
 
@@ -162,24 +161,44 @@ namespace AutoJumpMod {
 				return null;
 			}
 
+#if IL2CPP
 			if(jumpInputControl.TryCast<KeyControl>() is null) {
+#elif MONO
+			if(jumpInputControl as KeyControl is null) {
+#endif
 				Melon<Mod>.Logger.Msg("Couldn't find jump key control");
 				return null;
 			}
 
+#if IL2CPP
 			return jumpInputControl.Cast<KeyControl>();
-		}
+#elif MONO
+			return jumpInputControl as KeyControl;
+#endif
+        }
 
-		public override void OnUpdate() {
+        public override void OnUpdate() {
 			if(playerMovement == null) {
 				return;
 			}
 
-			if(playerMovement.IsGrounded && (jumpKeyControl?.isPressed ?? false) && !(jumpKeyControl?.wasPressedThisFrame ?? false) && readyToJump) {
+			if(playerMovement.TimeAirborne > 0.01f || playerMovement.TimeGrounded > 0.5f) {
+				readyToJump = true;
+			}
+
+			if(readyToJump && playerMovement.IsGrounded && playerMovement.CanMove && jumpKeyPressed() && !jumpKeyPressedThisFrame()) {
 				readyToJump = false;
 
 				MelonCoroutines.Start(Jump());
 			}
+		}
+
+		private static bool jumpKeyPressed() {
+			return jumpKeyControl?.isPressed ?? false;
+		}
+
+		private static bool jumpKeyPressedThisFrame() {
+			return jumpKeyControl?.wasPressedThisFrame ?? false;
 		}
 
 		private static IEnumerator Jump() {
@@ -194,10 +213,6 @@ namespace AutoJumpMod {
 			StateEvent.From(Keyboard.current.device, out eventPtr);
 			jumpKeyControl.WriteValueIntoEvent(1f, eventPtr);
 			InputSystem.QueueEvent(eventPtr);
-
-			yield return new WaitForSeconds(0.1f);
-
-			readyToJump = true;
 		}
 	}
 }
